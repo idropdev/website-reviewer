@@ -1,0 +1,20 @@
+{
+    "name": "website-reviewer-server",
+    "private": true,
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "nodemon --ext js --ignore node_modules index.js"
+    },
+    "dependencies": {
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.7",
+        "express": "^4.21.2",
+        "puppeteer": "^24.3.0",
+        "website-reviewer-monorepo": "file:.."
+    },
+    "devDependencies": {
+        "nodemon": "^3.1.9"
+    }
+}

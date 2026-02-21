@@ -1,0 +1,44 @@
+:root {
+    --primary-color: #00ff41;
+    --secondary-color: #008f11;
+    --bg-color: #0d0d0d;
+    --card-bg: rgba(0, 50, 0, 0.3);
+    --text-color: #e0e0e0;
+    --font-mono: 'Courier New', Courier, monospace;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-mono);
+    overflow-x: hidden;
+    height: 100vh;
+    width: 100vw;
+}
+
+#root {
+    width: 100%;
+    height: 100%;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #000;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--secondary-color);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
+}

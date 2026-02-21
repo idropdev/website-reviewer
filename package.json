@@ -1,0 +1,23 @@
+{
+  "name": "website-reviewer-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "predev": "node -e \"const {execSync}=require('child_process');try{const p=execSync('netstat -ano').toString().split('\\n').find(l=>l.includes(':8080')&&l.includes('LISTENING'));if(p){const id=p.trim().split(/\\s+/).pop();execSync('taskkill /PID '+id+' /F');console.log('Freed port 8080 (PID '+id+')')}}catch(e){}\"",
+    "dev": "concurrently -n client,server -c cyan,green \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:client": "npm run dev --workspace=client",
+    "dev:server": "npm run dev --workspace=server",
+    "build": "npm run build --workspace=client",
+    "install:all": "npm install && npm install --workspace=client && npm install --workspace=server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "dependencies": {
+    "website-reviewer-monorepo": "file:"
+  }
+}
