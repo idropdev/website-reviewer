@@ -14,7 +14,8 @@ function App() {
         setError(null);
 
         try {
-            const response = await fetch('/api/scan', {
+            const API_BASE = import.meta.env.VITE_API_URL || '';
+            const response = await fetch(`${API_BASE}/api/scan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url }),
@@ -30,7 +31,7 @@ function App() {
 
             setScanData(data);
         } catch (err) {
-            setError(`Network error: ${err.message}. Is the server running on port 8080?`);
+            setError(`Network error: ${err.message}. Is the backend server running?`);
         } finally {
             setLoading(false);
         }
