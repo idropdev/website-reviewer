@@ -16,8 +16,5 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
-  },
-  "dependencies": {
-    "website-reviewer-monorepo": "file:"
   }
 }
