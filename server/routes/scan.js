@@ -2,6 +2,7 @@ import express from 'express';
 import { validateUrl } from '../utils/validators.js';
 import { scrape } from '../services/scraper.js';
 import { score } from '../services/scoring.js';
+import { aiScore } from '../services/aiScoring.js';
 
 const router = express.Router();
 
@@ -37,8 +38,19 @@ router.post('/scan', async (req, res) => {
         });
     }
 
-    // 3) Score
-    const analysis = score(scrapeResult);
+    // 3) Score — AI if provider + key configured, simulation fallback otherwise
+    const provider = (process.env.AI_PROVIDER ?? '').toLowerCase();
+    const hasKey =
+        (provider === 'gemini' && process.env.GEMINI_API_KEY) ||
+        (provider === 'openai' && process.env.OPENAI_API_KEY);
+
+    let analysis = null;
+    if (hasKey) {
+        analysis = await aiScore(scrapeResult);
+    }
+    if (!analysis) {
+        analysis = score(scrapeResult); // simulation fallback
+    }
 
     // 4) Return
     return res.json({

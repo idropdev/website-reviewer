@@ -8,9 +8,11 @@
         "dev": "nodemon --ext js --ignore node_modules index.js"
     },
     "dependencies": {
+        "@google/generative-ai": "^0.24.1",
         "cors": "^2.8.5",
         "dotenv": "^16.4.7",
         "express": "^4.21.2",
+        "openai": "^6.27.0",
         "puppeteer": "^24.3.0"
     },
     "devDependencies": {
