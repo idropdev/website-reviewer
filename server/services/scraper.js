@@ -56,35 +56,209 @@ function resolveFinalUrl(startUrl) {
 
 /** DOM extraction function for page.evaluate() */
 const extractData = (maxChars) => {
-    const title = document.title?.trim() ?? '';
-    const metaDescEl = document.querySelector('meta[name="description"]');
-    const metaDescription = metaDescEl?.getAttribute('content')?.trim() ?? '';
-    const canonicalEl = document.querySelector('link[rel="canonical"]');
-    const hasCanonical = !!canonicalEl;
-    const robotsMeta = document.querySelector('meta[name="robots"]');
-    const hasNoindex = (robotsMeta?.getAttribute('content') ?? '').toLowerCase().includes('noindex');
-    const getTextArr = (sel) =>
-        [...document.querySelectorAll(sel)].map((el) => el.textContent?.trim()).filter(Boolean).slice(0, 20);
-    const headings = { h1: getTextArr('h1'), h2: getTextArr('h2'), h3: getTextArr('h3') };
-    const hasSchema = document.querySelectorAll('script[type="application/ld+json"]').length > 0;
-    const skipTags = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'HEADER', 'FOOTER', 'NAV']);
-    function getVisibleText(el) {
-        if (!el) return '';
-        if (skipTags.has(el.tagName)) return '';
-        if (el.nodeType === Node.TEXT_NODE) return el.textContent ?? '';
-        let t = '';
-        for (const c of el.childNodes) t += getVisibleText(c) + ' ';
-        return t;
+    try {
+        // ─── Basics ────────────────────────────────────────────────
+        const title = document.title?.trim() ?? '';
+        const metaDescEl = document.querySelector('meta[name="description"]');
+        const metaDescription = metaDescEl?.getAttribute('content')?.trim() ?? '';
+        const canonicalEl = document.querySelector('link[rel="canonical"]');
+        const hasCanonical = !!canonicalEl;
+        const canonical = canonicalEl?.getAttribute('href')?.trim() ?? null;
+        const robotsMeta = document.querySelector('meta[name="robots"]');
+        const hasNoindex = (robotsMeta?.getAttribute('content') ?? '').toLowerCase().includes('noindex');
+
+        // ─── URL & Slug ────────────────────────────────────────────
+        const pageUrl = window.location.href;
+        const slug = window.location.pathname;
+
+        // ─── Open Graph ────────────────────────────────────────────
+        const ogMeta = (prop) => document.querySelector(`meta[property="${prop}"]`)?.getAttribute('content')?.trim() ?? null;
+        const og = {
+            title: ogMeta('og:title'),
+            description: ogMeta('og:description'),
+            image: ogMeta('og:image'),
+        };
+
+        // ─── Headings ─────────────────────────────────────────────
+        const getTextArr = (sel) =>
+            [...document.querySelectorAll(sel)].map((el) => el.textContent?.trim()).filter(Boolean).slice(0, 20);
+        const headings = { h1: getTextArr('h1'), h2: getTextArr('h2'), h3: getTextArr('h3') };
+
+        // ─── Question Headings ─────────────────────────────────────
+        const questionHeadings = [...headings.h2, ...headings.h3].filter((h) => h.endsWith('?'));
+
+        // ─── Schema.org (rich extraction) ──────────────────────────
+        const schemaScripts = document.querySelectorAll('script[type="application/ld+json"]');
+        const schemaTypes = [];
+        let schemaAuthor = null;
+        let datePublished = null;
+        let dateModified = null;
+        const faqEntries = [];
+
+        schemaScripts.forEach((script) => {
+            try {
+                const data = JSON.parse(script.textContent);
+                const items = Array.isArray(data) ? data : [data];
+                for (const item of items) {
+                    if (item['@type']) {
+                        const types = Array.isArray(item['@type']) ? item['@type'] : [item['@type']];
+                        types.forEach((t) => { if (!schemaTypes.includes(t)) schemaTypes.push(t); });
+                    }
+                    if (item.author && !schemaAuthor) {
+                        schemaAuthor = typeof item.author === 'string' ? item.author
+                            : item.author?.name ?? null;
+                    }
+                    if (item.datePublished && !datePublished) datePublished = item.datePublished;
+                    if (item.dateModified && !dateModified) dateModified = item.dateModified;
+                    // FAQPage mainEntity
+                    if ((item['@type'] === 'FAQPage' || (Array.isArray(item['@type']) && item['@type'].includes('FAQPage')))
+                        && Array.isArray(item.mainEntity)) {
+                        item.mainEntity.forEach((q) => {
+                            const question = q.name ?? q.text ?? '';
+                            const answer = q.acceptedAnswer?.text ?? '';
+                            if (question) faqEntries.push({ question, answer: answer.slice(0, 300) });
+                        });
+                    }
+                }
+            } catch { /* skip malformed JSON-LD */ }
+        });
+
+        const schema = {
+            types: schemaTypes,
+            author: schemaAuthor,
+            datePublished,
+            dateModified,
+            faqEntries,
+        };
+
+        const hasSchema = schemaTypes.length > 0;
+
+        // ─── Visible Text ──────────────────────────────────────────
+        const skipTags = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'HEADER', 'FOOTER', 'NAV']);
+        function getVisibleText(el) {
+            if (!el) return '';
+            if (skipTags.has(el.tagName)) return '';
+            if (el.nodeType === Node.TEXT_NODE) return el.textContent ?? '';
+            let t = '';
+            for (const c of el.childNodes) t += getVisibleText(c) + ' ';
+            return t;
+        }
+        const visibleText = getVisibleText(document.body).replace(/\s+/g, ' ').trim().slice(0, maxChars);
+
+        // ─── Content Signals ───────────────────────────────────────
+        // hasLists: any <ul> or <ol> with ≥ 2 <li> children
+        const hasLists = [...document.querySelectorAll('ul, ol')].some(
+            (list) => list.querySelectorAll(':scope > li').length >= 2
+        );
+
+        // hasDirectAnswer: first 150 words contain a sentence ≤ 40 words
+        const words = visibleText.split(/\s+/).slice(0, 150).join(' ');
+        const firstSentences = words.split(/[.?!]/).map((s) => s.trim()).filter(Boolean);
+        const hasDirectAnswer = firstSentences.some((s) => s.split(/\s+/).length <= 40 && s.split(/\s+/).length >= 5);
+
+        // avgSentenceLength & readingLevel
+        const allSentences = visibleText.split(/[.?!]/).map((s) => s.trim()).filter((s) => s.length > 3);
+        const totalWords = allSentences.reduce((sum, s) => sum + s.split(/\s+/).length, 0);
+        const avgSentenceLength = allSentences.length > 0 ? Math.round((totalWords / allSentences.length) * 10) / 10 : 0;
+        let readingLevel = 'basic';
+        if (avgSentenceLength > 25) readingLevel = 'advanced';
+        else if (avgSentenceLength >= 15) readingLevel = 'intermediate';
+
+        const wordCount = visibleText.split(/\s+/).filter(Boolean).length;
+
+        // ─── Author Byline ─────────────────────────────────────────
+        let authorByline = null;
+        const metaAuthor = document.querySelector('meta[name="author"]');
+        if (metaAuthor) authorByline = metaAuthor.getAttribute('content')?.trim() || null;
+        if (!authorByline) {
+            const relAuthor = document.querySelector('a[rel="author"]');
+            if (relAuthor) authorByline = relAuthor.textContent?.trim() || null;
+        }
+        if (!authorByline) {
+            const authorEl = document.querySelector('[class*="author"], [itemprop*="author"]');
+            if (authorEl) authorByline = authorEl.textContent?.trim().slice(0, 100) || null;
+        }
+
+        // ─── Has About/Contact Link ────────────────────────────────
+        let hasAboutContact = false;
+        document.querySelectorAll('nav a[href], footer a[href]').forEach((a) => {
+            const href = (a.getAttribute('href') ?? '').toLowerCase();
+            if (href.includes('/about') || href.includes('/contact')) hasAboutContact = true;
+        });
+
+        // ─── Images ────────────────────────────────────────────────
+        const allImages = document.querySelectorAll('img');
+        const imageCount = allImages.length;
+        let imagesMissingAlt = 0;
+        allImages.forEach((img) => {
+            const alt = img.getAttribute('alt');
+            if (!alt || alt.trim() === '') imagesMissingAlt++;
+        });
+        const images = { total: imageCount, missingAlt: imagesMissingAlt };
+
+        // ─── Links ─────────────────────────────────────────────────
+        const origin = window.location.origin;
+        let internal = 0, external = 0;
+        const extDomainSet = new Set();
+        document.querySelectorAll('a[href]').forEach((a) => {
+            const href = a.href;
+            if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
+            try {
+                const u = new URL(href, origin);
+                if (u.origin === origin) {
+                    internal++;
+                } else {
+                    external++;
+                    extDomainSet.add(u.hostname);
+                }
+            } catch { }
+        });
+        const externalDomains = [...extDomainSet].slice(0, 50);
+
+        return {
+            url: pageUrl,
+            slug,
+            title,
+            metaDescription,
+            og,
+            headings,
+            questionHeadings,
+            visibleText,
+            wordCount,
+            contentSignals: {
+                hasLists,
+                hasDirectAnswer,
+                avgSentenceLength,
+                readingLevel,
+            },
+            schema,
+            authorByline,
+            hasAboutContact,
+            images,
+            links: { internal, external, externalDomains },
+            technical: { hasSchema, hasCanonical, canonical, hasNoindex },
+        };
+    } catch (err) {
+        // Catastrophic fallback — return minimal data so the pipeline doesn't break
+        return {
+            url: window.location.href,
+            slug: window.location.pathname,
+            title: document.title?.trim() ?? '',
+            metaDescription: '',
+            og: { title: null, description: null, image: null },
+            headings: { h1: [], h2: [], h3: [] },
+            questionHeadings: [],
+            visibleText: '',
+            wordCount: 0,
+            contentSignals: { hasLists: false, hasDirectAnswer: false, avgSentenceLength: 0, readingLevel: 'basic' },
+            schema: { types: [], author: null, datePublished: null, dateModified: null, faqEntries: [] },
+            authorByline: null,
+            hasAboutContact: false,
+            images: { total: 0, missingAlt: 0 },
+            links: { internal: 0, external: 0, externalDomains: [] },
+            technical: { hasSchema: false, hasCanonical: false, canonical: null, hasNoindex: false },
+        };
     }
-    const visibleText = getVisibleText(document.body).replace(/\s+/g, ' ').trim().slice(0, maxChars);
-    const origin = window.location.origin;
-    let internal = 0, external = 0;
-    document.querySelectorAll('a[href]').forEach((a) => {
-        const href = a.href;
-        if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
-        try { const u = new URL(href, origin); if (u.origin === origin) internal++; else external++; } catch { }
-    });
-    return { title, metaDescription, headings, visibleText, links: { internal, external }, technical: { hasSchema, hasCanonical, hasNoindex } };
 };
 
 /**

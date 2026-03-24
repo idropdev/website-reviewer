@@ -135,6 +135,19 @@ const AIScanVisualizer = ({ scanData, isLoading }) => {
                         <span className="scrape-value">{scrape.metaDescription || '(none)'}</span>
                     </div>
                     <div className="scrape-field">
+                        <span className="scrape-label">URL / SLUG</span>
+                        <span className="scrape-value">{scrape.url ?? scanData.url} — {scrape.slug ?? '/'}</span>
+                    </div>
+                    {scrape.og && (scrape.og.title || scrape.og.description) && (
+                        <div className="scrape-field">
+                            <span className="scrape-label">OPEN GRAPH</span>
+                            <span className="scrape-value">
+                                {scrape.og.title && <>Title: {scrape.og.title}<br/></>}
+                                {scrape.og.description && <>Desc: {scrape.og.description}</>}
+                            </span>
+                        </div>
+                    )}
+                    <div className="scrape-field">
                         <span className="scrape-label">H1 TAGS</span>
                         <span className="scrape-value">{scrape.headings.h1.join(' | ') || '(none)'}</span>
                     </div>
@@ -142,10 +155,60 @@ const AIScanVisualizer = ({ scanData, isLoading }) => {
                         <span className="scrape-label">H2 TAGS</span>
                         <span className="scrape-value">{scrape.headings.h2.slice(0, 5).join(' | ') || '(none)'}</span>
                     </div>
+                    {scrape.questionHeadings?.length > 0 && (
+                        <div className="scrape-field">
+                            <span className="scrape-label">QUESTION HEADINGS</span>
+                            <span className="scrape-value">{scrape.questionHeadings.join(' | ')}</span>
+                        </div>
+                    )}
+                    <div className="scrape-field">
+                        <span className="scrape-label">CONTENT</span>
+                        <span className="scrape-value">
+                            {scrape.wordCount ?? '?'} words |
+                            Reading: {scrape.contentSignals?.readingLevel ?? '?'} |
+                            Lists: {scrape.contentSignals?.hasLists ? '✓' : '✗'} |
+                            Direct answer: {scrape.contentSignals?.hasDirectAnswer ? '✓' : '✗'}
+                        </span>
+                    </div>
+                    <div className="scrape-field">
+                        <span className="scrape-label">SCHEMA</span>
+                        <span className="scrape-value">
+                            {scrape.schema?.types?.length > 0
+                                ? `Types: ${scrape.schema.types.join(', ')}`
+                                : 'No structured data'
+                            }
+                            {scrape.schema?.author && <> | Author: {scrape.schema.author}</>}
+                            {scrape.schema?.datePublished && <> | Published: {scrape.schema.datePublished}</>}
+                        </span>
+                    </div>
+                    {scrape.schema?.faqEntries?.length > 0 && (
+                        <div className="scrape-field">
+                            <span className="scrape-label">FAQ ENTRIES</span>
+                            <span className="scrape-value">{scrape.schema.faqEntries.length} Q&A pairs found</span>
+                        </div>
+                    )}
+                    <div className="scrape-field">
+                        <span className="scrape-label">TRUST SIGNALS</span>
+                        <span className="scrape-value">
+                            Author: {scrape.authorByline ?? scrape.schema?.author ?? '✗'} |
+                            About/Contact: {scrape.hasAboutContact ? '✓' : '✗'}
+                        </span>
+                    </div>
+                    <div className="scrape-field">
+                        <span className="scrape-label">IMAGES</span>
+                        <span className="scrape-value">
+                            Total: {scrape.images?.total ?? 0} |
+                            Missing alt: {scrape.images?.missingAlt ?? 0}
+                        </span>
+                    </div>
                     <div className="scrape-field">
                         <span className="scrape-label">LINKS</span>
                         <span className="scrape-value">
                             Internal: {scrape.links.internal} | External: {scrape.links.external}
+                            {scrape.links.externalDomains?.length > 0 && (
+                                <> ({scrape.links.externalDomains.slice(0, 5).join(', ')}
+                                {scrape.links.externalDomains.length > 5 && ` +${scrape.links.externalDomains.length - 5} more`})</>
+                            )}
                         </span>
                     </div>
                     <div className="scrape-field">

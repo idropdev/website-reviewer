@@ -44,12 +44,20 @@ router.post('/scan', async (req, res) => {
         (provider === 'gemini' && process.env.GEMINI_API_KEY) ||
         (provider === 'openai' && process.env.OPENAI_API_KEY);
 
+    console.log(`[scan] Scoring ${validation.url} — provider: ${hasKey ? provider : 'none (simulation)'}`);
+
     let analysis = null;
     if (hasKey) {
         analysis = await aiScore(scrapeResult);
+        if (analysis) {
+            console.log(`[scan] ✅ AI scoring succeeded (${analysis.provider} / ${analysis.model})`);
+        } else {
+            console.log(`[scan] ⚠️  AI scoring failed or returned null — falling back to simulation`);
+        }
     }
     if (!analysis) {
         analysis = score(scrapeResult); // simulation fallback
+        console.log(`[scan] 🔁 Using simulation scoring`);
     }
 
     // 4) Return

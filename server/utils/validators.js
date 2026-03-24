@@ -39,7 +39,10 @@ export async function validateUrl(raw) {
 
     let parsed;
     try {
-        parsed = new URL(raw.trim());
+        const input = raw.trim();
+        // Auto-prepend https:// if no protocol is present so bare domains work
+        const withProtocol = /^https?:\/\//i.test(input) ? input : `https://${input}`;
+        parsed = new URL(withProtocol);
     } catch {
         return err('INVALID_URL', 'The provided value is not a valid URL.');
     }

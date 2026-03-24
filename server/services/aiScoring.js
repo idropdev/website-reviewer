@@ -1,33 +1,76 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 const OPENAI_MODEL = 'gpt-4o-mini'; // fast + cheap; swap to gpt-4o for higher quality
 
 /**
  * Builds the shared prompt payload from the scrape result.
  */
 function buildPrompt(scrape) {
-  const { title, metaDescription, headings, visibleText, links, technical } = scrape;
-  const snippet = (visibleText ?? '').slice(0, 4000);
+  const {
+    url, slug, title, metaDescription, og, headings, questionHeadings,
+    visibleText, wordCount, contentSignals, schema, authorByline,
+    hasAboutContact, images, links, technical,
+  } = scrape;
 
-  return `You are an expert SEO, AEO (Answer Engine Optimization), and GEO (Generative Engine Optimization) analyst.
+  const snippet = (visibleText ?? '').slice(0, 5000);
+  const cs = contentSignals ?? {};
+  const sch = schema ?? {};
+  const img = images ?? {};
+  const ogData = og ?? {};
 
-Analyze the following website page data and return a JSON object with scores and recommendations.
+  const faqSection = (sch.faqEntries ?? []).length > 0
+    ? sch.faqEntries.map((e) => `  Q: ${e.question}\n  A: ${e.answer}`).join('\n')
+    : '(none)';
+
+  return `You are an expert SEO, AEO (Answer Engine Optimization), and GEO (Generative Engine Optimization) analyst. 
+          Analyze the following website page data and return a JSON object with scores and recommendations.
 
 ## Page Data
+- URL: ${url ?? '(unknown)'}
+- URL Slug: ${slug ?? '/'}
 - Title: ${title || '(none)'}
 - Meta Description: ${metaDescription || '(none)'}
-- H1 Tags: ${JSON.stringify(headings?.h1 ?? [])}
-- H2 Tags: ${JSON.stringify(headings?.h2 ?? [])}
-- H3 Tags: ${JSON.stringify(headings?.h3 ?? [])}
-- Internal Links: ${links?.internal ?? 0}
-- External Links: ${links?.external ?? 0}
-- Has Schema.org Structured Data: ${technical?.hasSchema ?? false}
-- Has Canonical Tag: ${technical?.hasCanonical ?? false}
+- OG Title: ${ogData.title ?? '(none)'}
+- OG Description: ${ogData.description ?? '(none)'}
+- Canonical URL: ${technical?.canonical ?? '(none)'}
 - Has Noindex: ${technical?.hasNoindex ?? false}
-- Visible Text Length: ${(visibleText ?? '').length} characters
-- Visible Text Snippet (first 4000 chars):
+
+## Heading Structure
+- H1: ${JSON.stringify(headings?.h1 ?? [])}
+- H2s: ${JSON.stringify(headings?.h2 ?? [])}
+- H3s: ${JSON.stringify(headings?.h3 ?? [])}
+- Question headings: ${JSON.stringify(questionHeadings ?? [])}
+
+## Content Signals
+- Visible Word Count: ${wordCount ?? 0}
+- Has lists: ${cs.hasLists ?? false}
+- Has direct answer in first 150 words: ${cs.hasDirectAnswer ?? false}
+- Avg sentence length: ${cs.avgSentenceLength ?? 0} words (${cs.readingLevel ?? 'unknown'})
+
+## Schema.org
+- Types found: ${JSON.stringify(sch.types ?? [])}
+- Author (schema): ${sch.author ?? '(none)'}
+- datePublished: ${sch.datePublished ?? '(none)'}
+- dateModified: ${sch.dateModified ?? '(none)'}
+- FAQ entries:
+${faqSection}
+
+## Trust Signals
+- Author byline on page: ${authorByline ?? '(none)'}
+- Has About/Contact link: ${hasAboutContact ?? false}
+- External link domains: ${JSON.stringify((links?.externalDomains ?? []).slice(0, 20))}
+
+## Images
+- Total: ${img.total ?? 0}
+- Missing alt text: ${img.missingAlt ?? 0}
+
+## Links
+- Internal: ${links?.internal ?? 0}
+- External: ${links?.external ?? 0}
+
+## Visible Text (first 5000 chars):
 ${snippet}
 
 ## Required JSON Output Format
@@ -52,9 +95,9 @@ Return ONLY a valid JSON object in this exact shape (no markdown, no explanation
 }
 
 ## Scoring Criteria
-- SEO (0-100): Title quality, meta description, H1 usage, schema, text length, link structure
-- AEO (0-100): Content structured for AI/voice answers — headings hierarchy, Q&A patterns, readability, content depth
-- GEO (0-100): Entity clarity for generative AI — schema richness, named entities, canonical, content authority signals
+- SEO (0-100): Title tag quality, meta description, H1 presence and clarity, canonical tag, noindex status, image alt coverage, internal link structure, word count adequacy
+- AEO (0-100): Heading hierarchy, presence of question-format headings, lists/structured content, direct answer near top of page, reading level (basic/intermediate preferred), FAQPage schema
+- GEO (0-100): Entity clarity from schema types and content, named author + dates present, schema richness (multiple types, key properties filled), factual/citable content style, external link authority signals
 
 Be specific and actionable. Recommendations should reference the actual page content where possible.`;
 }
