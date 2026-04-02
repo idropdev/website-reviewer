@@ -215,6 +215,131 @@ const extractData = (maxChars) => {
         });
         const externalDomains = [...extDomainSet].slice(0, 50);
 
+        // ─── Events Detection ──────────────────────────────────────
+        const eventItems = [];
+        const eventSignals = [];
+        let eventsHasSchema = false;
+        let eventsHasDateInfo = false;
+        let eventsHasTicketLinks = false;
+
+        // 1) Schema.org Event types from JSON-LD
+        schemaScripts.forEach((script) => {
+            try {
+                const data = JSON.parse(script.textContent);
+                const items = Array.isArray(data) ? data : [data];
+                for (const item of items) {
+                    const types = Array.isArray(item['@type']) ? item['@type'] : [item['@type']];
+                    if (types.includes('Event')) {
+                        eventsHasSchema = true;
+                        const ev = {
+                            name: item.name ?? item.headline ?? '',
+                            date: item.startDate ?? null,
+                            endDate: item.endDate ?? null,
+                            venue: (typeof item.location === 'string' ? item.location
+                                : item.location?.name ?? item.location?.address ?? null),
+                            url: item.url ?? null,
+                            description: (item.description ?? '').slice(0, 200),
+                            source: 'schema',
+                        };
+                        if (ev.date) eventsHasDateInfo = true;
+                        if (item.offers?.url || item.url) eventsHasTicketLinks = true;
+                        eventItems.push(ev);
+                    }
+                }
+            } catch { /* skip malformed JSON-LD */ }
+        });
+        if (eventsHasSchema) eventSignals.push('schema.org Event JSON-LD');
+
+        // 2) DOM heuristics — detect repeating event-like cards
+        const dateRegex = /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:,?\s+\d{4})?\b|\b\d{1,2}\/\d{1,2}\/\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b/i;
+        const ticketWords = ['ticket', 'register', 'rsvp', 'buy ticket', 'get tickets', 'book now', 'sign up'];
+
+        // Look for <time> elements often used in event listings
+        const timeEls = document.querySelectorAll('time[datetime]');
+        if (timeEls.length >= 2) eventSignals.push('<time> elements');
+
+        // Scan common event card selectors
+        const eventCardSelectors = [
+            '[class*="event"]', '[class*="calendar"]', '[class*="listing"]',
+            '[data-type="event"]', '[itemtype*="Event"]', '.event-card', '.event-item',
+        ];
+        const seenNames = new Set(eventItems.map(e => e.name.toLowerCase()));
+
+        for (const sel of eventCardSelectors) {
+            const cards = document.querySelectorAll(sel);
+            if (cards.length < 2) continue; // need at least 2 to be a listing pattern
+            let addedFromSelector = 0;
+            cards.forEach((card) => {
+                // Skip non-content elements (buttons, links, nav items, spans, small tags)
+                const tag = card.tagName;
+                if (['BUTTON', 'A', 'SPAN', 'LABEL', 'INPUT', 'SELECT', 'OPTION',
+                     'NAV', 'HEADER', 'FOOTER', 'MAIN', 'BODY', 'HTML'].includes(tag)) return;
+                // Skip large containers that hold many child event elements
+                if (['SECTION', 'DIV', 'UL'].includes(tag)
+                    && card.querySelectorAll('[class*="event"]').length > 3) return;
+
+                const text = card.textContent?.trim() ?? '';
+                // Must have meaningful content (30-2000 chars) to be an event card
+                if (text.length < 30 || text.length > 2000) return;
+
+                // Extract event name from heading or first prominent text
+                const heading = card.querySelector('h1, h2, h3, h4, h5');
+                const linkEl = card.querySelector('a[href]');
+                const name = heading?.textContent?.trim()?.slice(0, 120)
+                          ?? linkEl?.textContent?.trim()?.slice(0, 120)
+                          ?? text.slice(0, 80);
+                if (!name || name.length < 3 || seenNames.has(name.toLowerCase())) return;
+
+                // Must have either a date or a detail link to qualify as an event
+                const timeEl = card.querySelector('time[datetime]');
+                let date = timeEl?.getAttribute('datetime') ?? null;
+                if (!date) {
+                    const match = text.match(dateRegex);
+                    if (match) date = match[0];
+                }
+                const url = linkEl?.href ?? null;
+                // Require at least a date OR a plausible event detail link
+                if (!date && !url) return;
+
+                seenNames.add(name.toLowerCase());
+                if (date) eventsHasDateInfo = true;
+
+                // Check for ticket links
+                const allLinks = card.querySelectorAll('a[href]');
+                allLinks.forEach((a) => {
+                    const lt = (a.textContent ?? '').toLowerCase();
+                    const lh = (a.href ?? '').toLowerCase();
+                    if (ticketWords.some(w => lt.includes(w) || lh.includes(w))) {
+                        eventsHasTicketLinks = true;
+                    }
+                });
+
+                // Extract venue
+                const venueEl = card.querySelector('[class*="venue"], [class*="location"], address');
+                const venue = venueEl?.textContent?.trim()?.slice(0, 100) ?? null;
+
+                eventItems.push({
+                    name,
+                    date,
+                    endDate: null,
+                    venue,
+                    url,
+                    description: text.slice(0, 200),
+                    source: 'dom',
+                });
+            });
+        }
+
+        const events = {
+            detected: eventItems.length > 0,
+            count: eventItems.length,
+            hasSchema: eventsHasSchema,
+            hasDateInfo: eventsHasDateInfo,
+            hasTicketLinks: eventsHasTicketLinks,
+            items: eventItems,
+            signals: eventSignals,
+        };
+
         return {
             url: pageUrl,
             slug,
@@ -237,6 +362,7 @@ const extractData = (maxChars) => {
             images,
             links: { internal, external, externalDomains },
             technical: { hasSchema, hasCanonical, canonical, hasNoindex },
+            events,
         };
     } catch (err) {
         // Catastrophic fallback — return minimal data so the pipeline doesn't break
@@ -257,6 +383,7 @@ const extractData = (maxChars) => {
             images: { total: 0, missingAlt: 0 },
             links: { internal: 0, external: 0, externalDomains: [] },
             technical: { hasSchema: false, hasCanonical: false, canonical: null, hasNoindex: false },
+            events: { detected: false, count: 0, hasSchema: false, hasDateInfo: false, hasTicketLinks: false, items: [], signals: [] },
         };
     }
 };

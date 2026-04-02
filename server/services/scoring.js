@@ -23,6 +23,8 @@ export function score(scrape) {
     const externalDomains = links?.externalDomains ?? [];
     const wordCount = scrape.wordCount ?? (visibleText?.split(/\s+/).filter(Boolean).length ?? 0);
     const slug = scrape.slug ?? '/';
+    const ev = scrape.events ?? {};
+    const evItems = ev.items ?? [];
 
     const h1Count = headings.h1.length;
     const h2Count = headings.h2.length;
@@ -115,6 +117,13 @@ export function score(scrape) {
         else seo += 2;
     }
 
+    // Events: 0–6 pts
+    if (ev.detected) {
+        if (ev.hasSchema) seo += 3;
+        if (ev.hasDateInfo) seo += 2;
+        if (ev.hasTicketLinks) seo += 1;
+    }
+
     seo = Math.min(100, Math.max(0, seo));
 
     // ─── AEO Score ────────────────────────────────────────────
@@ -179,6 +188,13 @@ export function score(scrape) {
     // Meta description presence (snippet source): 0–6 pts
     if (metaDescription && metaDescription.length >= 100) aeo += 6;
     else if (metaDescription && metaDescription.length >= 50) aeo += 3;
+
+    // Events structured data: 0–4 pts (helps answer engines extract event info)
+    if (ev.detected) {
+        if (ev.hasSchema && ev.hasDateInfo) aeo += 4;
+        else if (ev.hasSchema || ev.hasDateInfo) aeo += 2;
+        else aeo += 1;
+    }
 
     aeo = Math.min(100, Math.max(0, aeo));
 
@@ -246,6 +262,14 @@ export function score(scrape) {
     else if (og.title && og.description) geo += 3;
     else if (og.title) geo += 1;
 
+    // Events schema richness: 0–6 pts
+    if (ev.detected) {
+        if (ev.hasSchema && ev.count >= 5) geo += 6;
+        else if (ev.hasSchema) geo += 4;
+        else if (ev.count >= 5) geo += 3;
+        else geo += 1;
+    }
+
     geo = Math.min(100, Math.max(0, geo));
 
     // ─── Derive qualitative outputs ───────────────────────────
@@ -296,6 +320,12 @@ export function score(scrape) {
         strengths.push(`Links to ${externalDomains.length} external domains — signals research and authority`);
     if (faqCount >= 1)
         strengths.push(`FAQPage schema with ${faqCount} Q&A entries — direct AEO boost`);
+    if (ev.detected) {
+        strengths.push(`${ev.count} event(s) detected on the page`);
+        if (ev.hasSchema) strengths.push('Events use Schema.org Event structured data — excellent for rich results');
+        if (ev.hasDateInfo) strengths.push('Events include date information — helps search engines show event snippets');
+        if (ev.hasTicketLinks) strengths.push('Ticket/registration links found — drives user action');
+    }
 
     // ─── Issues ────────────────────────────────────────
     if (!title)
@@ -353,6 +383,11 @@ export function score(scrape) {
 
     if (!hasAboutContact)
         issues.push('No About or Contact page linked — reduces entity credibility for generative engines');
+
+    if (ev.detected && !ev.hasSchema)
+        issues.push(`${ev.count} events found on page but no Event schema.org markup — missing rich result eligibility`);
+    if (ev.detected && !ev.hasDateInfo)
+        issues.push('Events detected but no date information found — search engines cannot show event dates in results');
 
     // ─── Recommendations ───────────────────────────────
     if (!title) {
@@ -487,6 +522,33 @@ export function score(scrape) {
             item: 'Lead with a concise answer',
             why: 'AI answer engines and featured snippets prefer pages that provide a clear, concise answer in the first 1–2 sentences.',
             how: 'Start the main content with a 1–2 sentence direct answer to the page\'s primary question, then expand with detail.',
+        });
+    }
+
+    if (ev.detected && !ev.hasSchema) {
+        recommendations.push({
+            priority: 'high',
+            item: 'Add Schema.org Event markup to your events',
+            why: `You have ${ev.count} events but no Event structured data. Google uses Event schema to show rich event snippets, date/time info, and ticket links directly in search results.`,
+            how: 'Add JSON-LD <script type="application/ld+json"> blocks with @type "Event" for each event. Include name, startDate, endDate, location, description, and offers (for ticket links).',
+        });
+    }
+
+    if (ev.detected && !ev.hasDateInfo) {
+        recommendations.push({
+            priority: 'medium',
+            item: 'Add date information to events',
+            why: 'Events without dates cannot be surfaced in date-filtered searches or calendar integrations.',
+            how: 'Use <time datetime="YYYY-MM-DD"> elements or include startDate in Event schema. Ensure every event has a visible date.',
+        });
+    }
+
+    if (ev.detected && !ev.hasTicketLinks) {
+        recommendations.push({
+            priority: 'low',
+            item: 'Add ticket or registration links to events',
+            why: 'Events with action links (buy tickets, register) drive higher engagement and can appear in Google\'s event rich results with direct CTAs.',
+            how: 'Add "offers" with a URL in your Event schema, and include visible "Buy Tickets" or "Register" links for each event.',
         });
     }
 

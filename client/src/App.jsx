@@ -2,6 +2,7 @@ import { useState } from 'react'
 import './App.css'
 import ScannerInput from './components/ScannerInput'
 import AIScanVisualizer from './components/AIScanVisualizer'
+import EventsPanel from './components/EventsPanel'
 
 function App() {
     const [scanData, setScanData] = useState(null);
@@ -47,8 +48,10 @@ function App() {
                 </div>
             )}
             <AIScanVisualizer scanData={scanData} isLoading={loading} />
+            {scanData && <EventsPanel events={scanData.scrape?.events} />}
         </div>
     )
 }
 
 export default App
+

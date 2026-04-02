@@ -70,6 +70,15 @@ ${faqSection}
 - Internal: ${links?.internal ?? 0}
 - External: ${links?.external ?? 0}
 
+## Events
+- Events detected: ${(scrape.events?.detected) ?? false}
+- Event count: ${scrape.events?.count ?? 0}
+- Has Event schema: ${scrape.events?.hasSchema ?? false}
+- Has date info: ${scrape.events?.hasDateInfo ?? false}
+- Has ticket/registration links: ${scrape.events?.hasTicketLinks ?? false}
+- Detection signals: ${JSON.stringify(scrape.events?.signals ?? [])}
+- Event names (first 10): ${JSON.stringify((scrape.events?.items ?? []).slice(0, 10).map(e => e.name))}
+
 ## Visible Text (first 5000 chars):
 ${snippet}
 
