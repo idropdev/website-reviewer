@@ -554,38 +554,6 @@
     border-left: 4px solid #2196f3;
 }
 
-/* Green — Schema.org markup present */
-.events-notice-ok {
-    background: rgba(0, 200, 80, 0.06);
-    border: 1px solid rgba(0, 200, 80, 0.3);
-    border-left: 4px solid #00c850;
-}
-
-.events-notice-ok .events-notice-icon {
-    color: #00c850;
-}
-
-.events-notice-ok strong {
-    color: #7dffb3 !important;
-}
-
-/* Neutral grey/blue — DOM detected but no schema */
-.events-notice-neutral {
-    background: rgba(100, 120, 180, 0.06);
-    border: 1px solid rgba(100, 120, 180, 0.25);
-    border-left: 4px solid #6478b4;
-}
-
-.events-notice-neutral .events-notice-icon {
-    color: #8896cc;
-}
-
-/* Inline tag used inside notice body text */
-.notice-tag-text {
-    color: #ffb74d;
-    font-weight: bold;
-}
-
 .events-notice-icon {
     font-size: 1.4rem;
     flex-shrink: 0;

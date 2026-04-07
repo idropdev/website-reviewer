@@ -1,6 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
+const OPENAI_MODEL = 'gpt-4o-mini'; // fast + cheap; swap to gpt-4o for higher quality
 
 /**
  * Builds the shared prompt payload from the scrape result.
@@ -152,24 +154,52 @@ async function scoreWithGemini(scrape) {
   return normalise(JSON.parse(text), 'gemini', GEMINI_MODEL);
 }
 
+// ─── OpenAI ───────────────────────────────────────────────────────────────────
+
+async function scoreWithOpenAI(scrape) {
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const completion = await client.chat.completions.create({
+    model: OPENAI_MODEL,
+    response_format: { type: 'json_object' }, // enforces JSON output
+    messages: [
+      {
+        role: 'system',
+        content: 'You are an expert SEO, AEO, and GEO analyst. Always respond with valid JSON only.',
+      },
+      {
+        role: 'user',
+        content: buildPrompt(scrape),
+      },
+    ],
+  });
+  const text = stripFences(completion.choices[0].message.content.trim());
+  return normalise(JSON.parse(text), 'openai', OPENAI_MODEL);
+}
+
 // ─── Public entry point ────────────────────────────────────────────────────────
 
 /**
- * Score a page using Gemini.
+ * Score a page using an AI provider (Gemini or OpenAI).
+ * Provider is selected via AI_PROVIDER env var.
  * Returns null on any error so the caller can fall back to simulation scoring.
  *
  * @param {object} scrape - Result from scraper.js
  * @returns {object|null} analysis result, or null on failure
  */
 export async function aiScore(scrape) {
+  const provider = (process.env.AI_PROVIDER ?? '').toLowerCase();
+
   try {
-    if (process.env.GEMINI_API_KEY) {
+    if (provider === 'gemini' && process.env.GEMINI_API_KEY) {
       return await scoreWithGemini(scrape);
     }
-    // No valid key configured
+    if (provider === 'openai' && process.env.OPENAI_API_KEY) {
+      return await scoreWithOpenAI(scrape);
+    }
+    // No valid provider/key configured
     return null;
   } catch (err) {
-    console.error(`[aiScoring] Gemini call failed, falling back to simulation:`, err.message);
+    console.error(`[aiScoring] ${provider} call failed, falling back to simulation:`, err.message);
     return null;
   }
 }

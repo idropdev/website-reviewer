@@ -3,18 +3,15 @@ import { validateUrl } from '../utils/validators.js';
 import { scrape } from '../services/scraper.js';
 import { score } from '../services/scoring.js';
 import { aiScore } from '../services/aiScoring.js';
-import { scanLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
 /**
  * POST /api/scan
  * Body: { url: string }
- * Returns full scan result or structured error.
- *
- * Rate limited: 8 scans / 10 min per IP (on top of the global 120 req/15min limit).
+ * Returns full scan result or structured error
  */
-router.post('/scan', scanLimiter, async (req, res) => {
+router.post('/scan', async (req, res) => {
     const { url } = req.body;
 
     // 1) Validate + SSRF-protect the URL
@@ -41,16 +38,19 @@ router.post('/scan', scanLimiter, async (req, res) => {
         });
     }
 
-    // 3) Score — AI if key configured, simulation fallback otherwise
-    const hasKey = !!process.env.GEMINI_API_KEY;
+    // 3) Score — AI if provider + key configured, simulation fallback otherwise
+    const provider = (process.env.AI_PROVIDER ?? '').toLowerCase();
+    const hasKey =
+        (provider === 'gemini' && process.env.GEMINI_API_KEY) ||
+        (provider === 'openai' && process.env.OPENAI_API_KEY);
 
-    console.log(`[scan] Scoring ${validation.url} — provider: ${hasKey ? 'gemini' : 'none (simulation)'}`);
+    console.log(`[scan] Scoring ${validation.url} — provider: ${hasKey ? provider : 'none (simulation)'}`);
 
     let analysis = null;
     if (hasKey) {
         analysis = await aiScore(scrapeResult);
         if (analysis) {
-            console.log(`[scan] ✅ AI scoring succeeded (gemini / ${analysis.model})`);
+            console.log(`[scan] ✅ AI scoring succeeded (${analysis.provider} / ${analysis.model})`);
         } else {
             console.log(`[scan] ⚠️  AI scoring failed or returned null — falling back to simulation`);
         }

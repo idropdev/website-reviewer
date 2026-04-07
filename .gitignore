@@ -23,23 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# ─── Environment / secrets — NEVER commit these ────────────────────────────────
-# Root-level env files
+# Environment / secrets — NEVER commit these
 .env
-.env.*
-!.env.example
-
-# Server env files (be explicit — belt + suspenders)
-server/.env
-server/.env.*
-!server/.env.example
-
-# Any nested env files added in future
-**/.env
-**/.env.*
-!**/.env.example
-
-# Scratch / debug output files
-out.txt
-*.out
-
+.env.local
+.env.*.local
