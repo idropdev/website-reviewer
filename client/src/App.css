@@ -468,7 +468,56 @@
     }
 }
 
-/* Events Panel */
+/* Extracted text content box */
+.raw-data-section {
+    max-width: 900px;
+    width: 100%;
+    margin-top: 1.5rem;
+}
+
+.raw-data-section h3 {
+    color: var(--secondary-color);
+    border-left: 3px solid var(--primary-color);
+    padding-left: 1rem;
+    margin-bottom: 1rem;
+}
+
+.terminal-window {
+    background: #050f05;
+    border: 1px solid #1a3a1a;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.terminal-window::-webkit-scrollbar {
+    width: 6px;
+}
+
+.terminal-window::-webkit-scrollbar-track {
+    background: #0a0a0a;
+}
+
+.terminal-window::-webkit-scrollbar-thumb {
+    background: #2a4a2a;
+    border-radius: 3px;
+}
+
+.terminal-window::-webkit-scrollbar-thumb:hover {
+    background: #3a6a3a;
+}
+
+.code-block {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: #88bb88;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+    padding: 1.2rem;
+}
+
+
 .events-section {
     max-width: 900px;
     width: 100%;
@@ -503,6 +552,38 @@
     background: rgba(0, 150, 255, 0.07);
     border: 1px solid rgba(0, 150, 255, 0.3);
     border-left: 4px solid #2196f3;
+}
+
+/* Green — Schema.org markup present */
+.events-notice-ok {
+    background: rgba(0, 200, 80, 0.06);
+    border: 1px solid rgba(0, 200, 80, 0.3);
+    border-left: 4px solid #00c850;
+}
+
+.events-notice-ok .events-notice-icon {
+    color: #00c850;
+}
+
+.events-notice-ok strong {
+    color: #7dffb3 !important;
+}
+
+/* Neutral grey/blue — DOM detected but no schema */
+.events-notice-neutral {
+    background: rgba(100, 120, 180, 0.06);
+    border: 1px solid rgba(100, 120, 180, 0.25);
+    border-left: 4px solid #6478b4;
+}
+
+.events-notice-neutral .events-notice-icon {
+    color: #8896cc;
+}
+
+/* Inline tag used inside notice body text */
+.notice-tag-text {
+    color: #ffb74d;
+    font-weight: bold;
 }
 
 .events-notice-icon {

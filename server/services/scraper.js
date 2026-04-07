@@ -334,34 +334,56 @@ const extractData = (maxChars) => {
         // When DOM detection finds nothing, try parsing Name+Date pairs from
         // visible text. This covers JS-rendered pages where event card elements
         // don't exist in the DOM at extraction time but text is already present.
-        const textDateRegex = /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4}\b/gi;
+        //
+        // Handles three common date formats:
+        //   Month DD, YYYY  →  "April 28, 2026"
+        //   MM/DD/YYYY      →  "4/28/2026"
+        //   YYYY-MM-DD      →  "2026-04-28"  (ISO)
+        const textDateRegex = /\b(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})\b/gi;
         const textDateMatches = (visibleText || '').match(textDateRegex) || [];
         const textEventsFound = textDateMatches.length;
         let extractionNote = null;
 
-        if (eventItems.length === 0 && textEventsFound >= 2) {
-            // Try to extract Name Date pairs from the concatenated visible text
-            const textEventRegex = /([A-Z][^.!?\n]{4,100}?)\s+((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4})/g;
-            const seenTextNames = new Set();
-            let tMatch;
-            while ((tMatch = textEventRegex.exec(visibleText || '')) !== null) {
-                const rawName = tMatch[1].replace(/^[\s\-\u2013\u2014\u2022*]\s*/, '').trim();
-                const textDate = tMatch[2];
+        // Helper — run text extraction and merge unique results into eventItems
+        function extractFromText(text, existingItems) {
+            const textEventRegex = /([A-Z][^.!?\n]{4,100}?)\s+((?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2}))/g;
+            const seen = new Set(existingItems.map(e => e.name.toLowerCase().slice(0, 50)));
+            const added = [];
+            let m;
+            while ((m = textEventRegex.exec(text || '')) !== null) {
+                const rawName = m[1].replace(/^[\s\-\u2013\u2014\u2022*]\s*/, '').trim();
+                const textDate = m[2];
                 if (!rawName || rawName.length < 5) continue;
-                const nameKey = rawName.toLowerCase().slice(0, 50);
-                if (seenTextNames.has(nameKey)) continue;
-                seenTextNames.add(nameKey);
-                eventItems.push({ name: rawName.slice(0, 120), date: textDate, endDate: null, venue: null, url: null, description: null, source: 'text' });
+                const key = rawName.toLowerCase().slice(0, 50);
+                if (seen.has(key)) continue;
+                seen.add(key);
+                const item = { name: rawName.slice(0, 120), date: textDate, endDate: null, venue: null, url: null, description: null, source: 'text' };
+                existingItems.push(item);
+                added.push(item);
                 eventsHasDateInfo = true;
             }
-            if (eventItems.length > 0) {
+            return added;
+        }
+
+        if (eventItems.length === 0 && textEventsFound >= 2) {
+            // DOM found nothing — try full text extraction as primary source
+            const added = extractFromText(visibleText, eventItems);
+            if (added.length > 0) {
                 eventSignals.push('text extraction (page may use JS rendering)');
                 extractionNote = 'partial_render';
             } else {
                 extractionNote = 'text_has_dates_no_structure';
             }
-        } else if (eventItems.length > 0 && textEventsFound > eventItems.length + 5) {
-            extractionNote = 'may_have_more_events';
+        } else if (eventItems.length > 0 && textEventsFound >= 2 && textEventsFound > eventItems.length) {
+            // DOM found some events, but text has more date patterns —
+            // supplement DOM results with text-extracted events
+            const addedCount = extractFromText(visibleText, eventItems).length;
+            if (addedCount > 0) {
+                eventSignals.push('text extraction (supplemental)');
+                extractionNote = 'partial_render';
+            } else {
+                extractionNote = 'may_have_more_events';
+            }
         }
 
         const events = {

@@ -1,7 +1,32 @@
 import React from 'react';
 
-// ─── Diagnostic notice when events are in text but not found in DOM ───────────
-const ExtractionNotice = ({ note, textEventsFound, eventsCount }) => {
+// ─── Always-visible detection status notice ───────────────────────────────────
+// Shows one of four states depending on how events were detected:
+//   1. schema      → green: has proper Schema.org markup (best case)
+//   2. dom_only    → yellow: DOM detected events, no schema markup
+//   3. partial     → orange: some/all events came from text, not DOM
+//   4. text_only   → orange+: dates found in text but no names extracted
+const DetectionStatus = ({ events }) => {
+    // Best case: site uses Schema.org Event markup
+    if (events.hasSchema) {
+        return (
+            <div className="events-render-notice events-notice-ok">
+                <span className="events-notice-icon">✓</span>
+                <div className="events-notice-body">
+                    <strong>Events use Schema.org structured data — great!</strong>
+                    <p>
+                        This page marks up events with Schema.org Event markup. Search engines
+                        and AI assistants can reliably discover, read, and display these events
+                        without relying on screen-scraping.
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    // Text dates found but couldn't extract names → worst extraction case (shown in "no events" path too)
+    const note = events.extractionNote;
+
     if (note === 'text_has_dates_no_structure') {
         return (
             <div className="events-render-notice events-notice-warn">
@@ -9,16 +34,16 @@ const ExtractionNotice = ({ note, textEventsFound, eventsCount }) => {
                 <div className="events-notice-body">
                     <strong>Events found in page text — couldn't extract structure</strong>
                     <p>
-                        {textEventsFound} date pattern{textEventsFound !== 1 ? 's' : ''} found in the page content,
-                        but events couldn't be read from the HTML structure. This usually means:
+                        {events.textEventsFound} date pattern{events.textEventsFound !== 1 ? 's' : ''} were
+                        found in the page content, but events couldn't be read from the HTML. This usually means:
                     </p>
                     <ul>
-                        <li>Events are loaded via JavaScript — the page wasn't fully rendered when scanned</li>
-                        <li>Events use custom or non-standard HTML markup our parser doesn't recognise</li>
+                        <li>Events load via JavaScript — the page may not have fully rendered when scanned</li>
+                        <li>Events use custom HTML that our parser doesn't recognise</li>
                     </ul>
                     <p className="events-notice-tip">
                         💡 <strong>This is a website-side issue.</strong> Adding{' '}
-                        <strong>Schema.org Event markup</strong> would make events reliably discoverable by
+                        <strong>Schema.org Event markup</strong> makes events reliably readable by
                         scanners, search engines, and AI — regardless of how they're rendered.
                     </p>
                 </div>
@@ -26,90 +51,84 @@ const ExtractionNotice = ({ note, textEventsFound, eventsCount }) => {
         );
     }
 
+    // Text extraction supplemented or replaced DOM results
     if (note === 'partial_render') {
         return (
             <div className="events-render-notice events-notice-warn">
                 <span className="events-notice-icon">⚠</span>
                 <div className="events-notice-body">
-                    <strong>Events extracted from page text (not from HTML structure)</strong>
+                    <strong>Some events were read from page text, not from HTML structure</strong>
                     <p>
-                        The page appears to load events via JavaScript. Events below were parsed from
-                        the page's visible text content and may be incomplete. Adding{' '}
-                        <strong>Schema.org Event markup</strong> would make events reliably
-                        machine-readable.
+                        The page's HTML didn't contain enough structured event data, so some events
+                        were parsed from the visible text. Those are marked{' '}
+                        <span className="notice-tag-text">"from page text"</span> and may be
+                        less precise. Without structured markup, search engines and AI may miss
+                        or misread these events.
+                    </p>
+                    <p className="events-notice-tip">
+                        💡 <strong>This is a website-side issue.</strong> Adding{' '}
+                        <strong>Schema.org Event markup</strong> would make all events reliably
+                        discoverable — by this tool, search engines, and AI assistants.
                     </p>
                 </div>
             </div>
         );
     }
 
-    if (note === 'may_have_more_events') {
-        return (
-            <div className="events-render-notice events-notice-info">
-                <span className="events-notice-icon">ℹ</span>
-                <div className="events-notice-body">
-                    <strong>More events may exist on this page</strong>
-                    <p>
-                        {textEventsFound} date patterns were found in the page text, but only{' '}
-                        {eventsCount} event{eventsCount !== 1 ? 's' : ''} were extracted from the HTML
-                        structure. Some events may not have been captured due to JavaScript rendering.
-                    </p>
-                </div>
+    // DOM detected events cleanly, but no schema markup
+    return (
+        <div className="events-render-notice events-notice-neutral">
+            <span className="events-notice-icon">ℹ</span>
+            <div className="events-notice-body">
+                <strong>Events detected from HTML structure — no structured markup found</strong>
+                <p>
+                    Events were found by scanning the page's HTML elements, but the site doesn't
+                    use <strong>Schema.org Event markup</strong>. This means search engines and AI
+                    assistants may struggle to reliably identify these events — they are relying
+                    on the same visual scraping this tool uses, which can break when the site changes.
+                </p>
+                <p className="events-notice-tip">
+                    💡 Adding <strong>Schema.org Event markup</strong> (JSON-LD) is the industry
+                    standard for event discoverability and takes less than an hour to implement.
+                </p>
             </div>
-        );
-    }
-
-    return null;
+        </div>
+    );
 };
 
 // ─── Main component ───────────────────────────────────────────────────────────
 const EventsPanel = ({ events }) => {
     if (!events) return null;
 
-    // No events detected
+    // No events detected at all
     if (!events.detected) {
-        // Special case: text has date patterns but DOM extraction found nothing
-        if (events.extractionNote === 'text_has_dates_no_structure') {
-            return (
-                <div className="analysis-section events-section">
-                    <h3>EVENTS DETECTION</h3>
-                    <ExtractionNotice
-                        note="text_has_dates_no_structure"
-                        textEventsFound={events.textEventsFound}
-                    />
-                </div>
-            );
-        }
-
-        // Generic no-events state
         return (
             <div className="analysis-section events-section">
                 <h3>EVENTS DETECTION</h3>
-                <div className="events-empty">
-                    <span className="events-empty-icon">📅</span>
-                    <p>No events detected on this page.</p>
-                    <p className="events-empty-hint">
-                        If this is an events page, consider adding Schema.org Event markup so
-                        search engines and AI can always discover your events.
-                    </p>
-                </div>
+                {/* Still show a status notice — explain why nothing was found */}
+                <DetectionStatus events={events} />
+                {/* Only show the empty state if the notice above isn't already covering it */}
+                {events.extractionNote !== 'text_has_dates_no_structure' && (
+                    <div className="events-empty">
+                        <span className="events-empty-icon">📅</span>
+                        <p>No events detected on this page.</p>
+                        <p className="events-empty-hint">
+                            If this is an events page, consider adding Schema.org Event markup so
+                            search engines and AI can always discover your events.
+                        </p>
+                    </div>
+                )}
             </div>
         );
     }
 
-    // Events detected — may have a diagnostic note
+    // Events detected — always show status notice first
     return (
         <div className="analysis-section events-section">
             <h3>EVENTS DETECTION</h3>
 
-            {/* Diagnostic notice (partial_render or may_have_more_events) */}
-            {events.extractionNote && (
-                <ExtractionNotice
-                    note={events.extractionNote}
-                    textEventsFound={events.textEventsFound}
-                    eventsCount={events.count}
-                />
-            )}
+            {/* Always-visible status notice */}
+            <DetectionStatus events={events} />
 
             {/* Status badges */}
             <div className="events-status-grid">

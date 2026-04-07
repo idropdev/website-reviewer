@@ -227,9 +227,7 @@ const AIScanVisualizer = ({ scanData, isLoading }) => {
                 <h3>EXTRACTED TEXT CONTENT</h3>
                 <div className="terminal-window">
                     <pre className="code-block">
-                        {scrape.visibleText
-                            ? scrape.visibleText.slice(0, 2000) + (scrape.visibleText.length > 2000 ? '\n\n... [truncated]' : '')
-                            : '(no visible text extracted)'}
+                        {scrape.visibleText || '(no visible text extracted)'}
                     </pre>
                 </div>
             </div>
