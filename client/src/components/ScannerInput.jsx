@@ -5,7 +5,16 @@ const ScannerInput = ({ onScan, isLoading }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (url && !isLoading) onScan(url);
+        
+        let finalUrl = url.trim();
+        if (finalUrl && !/^https?:\/\//i.test(finalUrl)) {
+            finalUrl = 'https://' + finalUrl;
+        }
+
+        if (finalUrl && !isLoading) {
+            setUrl(finalUrl); // update input box visually 
+            onScan(finalUrl);
+        }
     };
 
     return (
@@ -14,8 +23,8 @@ const ScannerInput = ({ onScan, isLoading }) => {
             <p className="subtitle">See how AI perceives your website — SEO · AEO · GEO</p>
             <form onSubmit={handleSubmit} className="scanner-form">
                 <input
-                    type="url"
-                    placeholder="Enter website URL (e.g., https://example.com)"
+                    type="text"
+                    placeholder="Enter website URL (e.g., visitelpaso.com)"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     required
