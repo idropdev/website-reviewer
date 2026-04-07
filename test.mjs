@@ -25,12 +25,12 @@ async function main() {
         const simScore = score(res);
         console.log('Simulation score:', simScore.scores);
 
-        if (process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) {
+        if (process.env.GEMINI_API_KEY) {
             console.log('AI Scoring...');
             const ai = await aiScore(res);
             console.log('AI score ok?', !!ai);
         } else {
-            console.log('No AI keys found.');
+            console.log('No Gemini AI key found.');
         }
 
     } catch (err) {

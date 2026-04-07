@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 /**
  * Standardized 429 response — returns JSON consistent with the rest of the API.
@@ -51,8 +51,11 @@ export const scanLimiter = rateLimit({
     handler: rateLimitHandler,
     // When behind a reverse proxy / CDN (Cloud Run, Render, etc.) prefer
     // the forwarded IP over the gateway IP so limits are per-user, not per-server.
-    keyGenerator: (req) =>
-        req.headers['x-forwarded-for']?.split(',')[0].trim() || req.ip,
+    // ipKeyGenerator handles IPv6 normalisation so users can't bypass limits.
+    keyGenerator: (req) => {
+        const forwarded = req.headers['x-forwarded-for']?.split(',')[0].trim();
+        return forwarded || ipKeyGenerator(req);
+    },
 });
 
 /**

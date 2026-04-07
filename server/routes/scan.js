@@ -41,19 +41,16 @@ router.post('/scan', scanLimiter, async (req, res) => {
         });
     }
 
-    // 3) Score — AI if provider + key configured, simulation fallback otherwise
-    const provider = (process.env.AI_PROVIDER ?? '').toLowerCase();
-    const hasKey =
-        (provider === 'gemini' && process.env.GEMINI_API_KEY) ||
-        (provider === 'openai' && process.env.OPENAI_API_KEY);
+    // 3) Score — AI if key configured, simulation fallback otherwise
+    const hasKey = !!process.env.GEMINI_API_KEY;
 
-    console.log(`[scan] Scoring ${validation.url} — provider: ${hasKey ? provider : 'none (simulation)'}`);
+    console.log(`[scan] Scoring ${validation.url} — provider: ${hasKey ? 'gemini' : 'none (simulation)'}`);
 
     let analysis = null;
     if (hasKey) {
         analysis = await aiScore(scrapeResult);
         if (analysis) {
-            console.log(`[scan] ✅ AI scoring succeeded (${analysis.provider} / ${analysis.model})`);
+            console.log(`[scan] ✅ AI scoring succeeded (gemini / ${analysis.model})`);
         } else {
             console.log(`[scan] ⚠️  AI scoring failed or returned null — falling back to simulation`);
         }
