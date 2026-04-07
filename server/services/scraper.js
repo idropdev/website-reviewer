@@ -330,6 +330,40 @@ const extractData = (maxChars) => {
             });
         }
 
+        // ─── Text-based events fallback ──────────────────────────────
+        // When DOM detection finds nothing, try parsing Name+Date pairs from
+        // visible text. This covers JS-rendered pages where event card elements
+        // don't exist in the DOM at extraction time but text is already present.
+        const textDateRegex = /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4}\b/gi;
+        const textDateMatches = (visibleText || '').match(textDateRegex) || [];
+        const textEventsFound = textDateMatches.length;
+        let extractionNote = null;
+
+        if (eventItems.length === 0 && textEventsFound >= 2) {
+            // Try to extract Name Date pairs from the concatenated visible text
+            const textEventRegex = /([A-Z][^.!?\n]{4,100}?)\s+((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4})/g;
+            const seenTextNames = new Set();
+            let tMatch;
+            while ((tMatch = textEventRegex.exec(visibleText || '')) !== null) {
+                const rawName = tMatch[1].replace(/^[\s\-\u2013\u2014\u2022*]\s*/, '').trim();
+                const textDate = tMatch[2];
+                if (!rawName || rawName.length < 5) continue;
+                const nameKey = rawName.toLowerCase().slice(0, 50);
+                if (seenTextNames.has(nameKey)) continue;
+                seenTextNames.add(nameKey);
+                eventItems.push({ name: rawName.slice(0, 120), date: textDate, endDate: null, venue: null, url: null, description: null, source: 'text' });
+                eventsHasDateInfo = true;
+            }
+            if (eventItems.length > 0) {
+                eventSignals.push('text extraction (page may use JS rendering)');
+                extractionNote = 'partial_render';
+            } else {
+                extractionNote = 'text_has_dates_no_structure';
+            }
+        } else if (eventItems.length > 0 && textEventsFound > eventItems.length + 5) {
+            extractionNote = 'may_have_more_events';
+        }
+
         const events = {
             detected: eventItems.length > 0,
             count: eventItems.length,
@@ -338,7 +372,11 @@ const extractData = (maxChars) => {
             hasTicketLinks: eventsHasTicketLinks,
             items: eventItems,
             signals: eventSignals,
+            textEventsFound,
+            extractionNote,
         };
+
+        const scrapeQuality = wordCount >= 500 ? 'full' : wordCount >= 100 ? 'partial' : 'minimal';
 
         return {
             url: pageUrl,
@@ -363,6 +401,7 @@ const extractData = (maxChars) => {
             links: { internal, external, externalDomains },
             technical: { hasSchema, hasCanonical, canonical, hasNoindex },
             events,
+            scrapeQuality,
         };
     } catch (err) {
         // Catastrophic fallback — return minimal data so the pipeline doesn't break
@@ -383,7 +422,8 @@ const extractData = (maxChars) => {
             images: { total: 0, missingAlt: 0 },
             links: { internal: 0, external: 0, externalDomains: [] },
             technical: { hasSchema: false, hasCanonical: false, canonical: null, hasNoindex: false },
-            events: { detected: false, count: 0, hasSchema: false, hasDateInfo: false, hasTicketLinks: false, items: [], signals: [] },
+            events: { detected: false, count: 0, hasSchema: false, hasDateInfo: false, hasTicketLinks: false, items: [], signals: [], textEventsFound: 0, extractionNote: null },
+            scrapeQuality: 'minimal',
         };
     }
 };
@@ -456,17 +496,24 @@ async function probeWithCDP(url) {
  * @param {string} url
  * @returns {Promise<ScrapeResult>}
  */
-export async function scrape(url) {
-    // Step 1: resolve HTTP-level redirects
-    const httpResolved = await resolveFinalUrl(url);
+/**
+ * Performs a clean browser scrape with retry logic.
+ * Uses networkidle2 on the first attempt (waits for JS data fetches to settle),
+ * escalating to networkidle0 + longer waits on retries.
+ *
+ * Retries automatically when the page returns thin content (< 100 words),
+ * which indicates the JS framework hadn't finished rendering at extraction time.
+ *
+ * @param {string} url - Final URL to scrape (after redirect resolution)
+ * @param {number} attempt - Current attempt number (1-indexed)
+ */
+async function scrapeClean(url, attempt = 1) {
+    const MAX_ATTEMPTS = 3;
+    const waitMsByAttempt = [2500, 4000, 6000];
+    const waitMs = waitMsByAttempt[attempt - 1] ?? 6000;
+    const waitUntil = attempt === 1 ? 'networkidle2' : 'networkidle0';
 
-    // Step 2: CDP probe — captures real URL or directly extracts data
-    const probeResult = await probeWithCDP(httpResolved);
-    if (probeResult.result) return probeResult.result; // probe succeeded directly
-
-    // Step 3: fresh browser to the captured final URL
-    const finalUrl = probeResult.finalUrl;
-    console.log(`[scraper] starting clean scrape of: ${finalUrl}`);
+    console.log(`[scraper] Clean scrape attempt ${attempt}/${MAX_ATTEMPTS}: ${url} (${waitUntil}, +${waitMs}ms)`);
 
     let browser;
     try {
@@ -474,12 +521,59 @@ export async function scrape(url) {
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 800 });
         await page.setUserAgent(REAL_UA);
-        await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9', 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8' });
-        await page.goto(finalUrl, { waitUntil: 'domcontentloaded', timeout: PUPPETEER_TIMEOUT_MS });
-        await new Promise((r) => setTimeout(r, 1500));
-        console.log(`[scraper] clean scrape page URL: ${page.url()}`);
-        return await page.evaluate(extractData, MAX_TEXT_CHARS);
+        await page.setExtraHTTPHeaders({
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        });
+        await page.goto(url, { waitUntil, timeout: PUPPETEER_TIMEOUT_MS });
+        await new Promise((r) => setTimeout(r, waitMs));
+        console.log(`[scraper] Page URL after goto: ${page.url()}`);
+        const result = await page.evaluate(extractData, MAX_TEXT_CHARS);
+
+        // Retry with longer wait if content is too thin and retries remain
+        if (result.wordCount < 100 && attempt < MAX_ATTEMPTS) {
+            console.log(`[scraper] Thin result (${result.wordCount} words) on attempt ${attempt} — retrying with longer wait...`);
+            await new Promise((r) => setTimeout(r, 1500 * attempt)); // brief pause before retry
+            return scrapeClean(url, attempt + 1);
+        }
+
+        return result;
     } finally {
         if (browser) try { await browser.close(); } catch { }
     }
+}
+
+/**
+ * Scrapes a URL using Puppeteer and returns structured data.
+ *
+ * For sites with JS-driven redirects (Cloudflare, Google Ads ?gad_source=1):
+ *  1. Pre-resolve server-side HTTP redirects via lightweight HEAD requests
+ *  2. Probe with CDP to capture the real final URL even if the frame detaches
+ *  3. Run scrapeClean() on the known-final URL with networkidle2 + retries
+ *
+ * @param {string} url
+ * @returns {Promise<ScrapeResult>}
+ */
+export async function scrape(url) {
+    // Step 1: resolve HTTP-level redirects
+    const httpResolved = await resolveFinalUrl(url);
+
+    // Step 2: CDP probe — captures real URL or directly extracts data
+    const probeResult = await probeWithCDP(httpResolved);
+
+    if (probeResult.result) {
+        const result = probeResult.result;
+        // Probe extracted content directly. If it looks complete, use it.
+        if (result.wordCount >= 100) {
+            console.log(`[scraper] Probe returned good content (${result.wordCount} words) — using directly`);
+            return result;
+        }
+        // Probe returned thin content (page likely not fully rendered yet).
+        // Fall through to a proper networkidle2 scrape.
+        console.log(`[scraper] Probe result too thin (${result.wordCount} words) — escalating to full scrape`);
+        return scrapeClean(result.url || httpResolved);
+    }
+
+    // Step 3: fresh browser to the captured final URL with networkidle2 + retries
+    return scrapeClean(probeResult.finalUrl);
 }

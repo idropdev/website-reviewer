@@ -483,6 +483,79 @@
     margin-bottom: 1rem;
 }
 
+/* Diagnostic extraction notices */
+.events-render-notice {
+    display: flex;
+    gap: 1rem;
+    padding: 1.2rem 1.5rem;
+    margin-bottom: 1.5rem;
+    border-radius: 0;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.events-notice-warn {
+    background: rgba(255, 152, 0, 0.08);
+    border: 1px solid rgba(255, 152, 0, 0.4);
+    border-left: 4px solid #ff9800;
+}
+
+.events-notice-info {
+    background: rgba(0, 150, 255, 0.07);
+    border: 1px solid rgba(0, 150, 255, 0.3);
+    border-left: 4px solid #2196f3;
+}
+
+.events-notice-icon {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+.events-notice-body {
+    flex: 1;
+}
+
+.events-notice-body strong {
+    display: block;
+    color: #e0e0e0;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+}
+
+.events-notice-body p {
+    color: #bbb;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin: 0 0 0.6rem;
+}
+
+.events-notice-body ul {
+    color: #aaa;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin: 0.4rem 0 0.6rem;
+    padding-left: 1.4rem;
+}
+
+.events-notice-body ul li {
+    margin-bottom: 0.2rem;
+}
+
+.events-notice-tip {
+    color: #999 !important;
+    font-size: 0.82rem !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: 0.6rem !important;
+    margin-top: 0.4rem !important;
+}
+
+.events-notice-tip strong {
+    display: inline !important;
+    color: #ffb74d !important;
+    font-size: inherit !important;
+    margin: 0 !important;
+}
+
 .events-empty {
     text-align: center;
     padding: 2rem;
@@ -629,10 +702,24 @@
     font-size: 0.65rem;
     text-transform: uppercase;
     padding: 0.15rem 0.5rem;
+    letter-spacing: 1px;
+}
+
+.source-dom {
     background: rgba(0, 255, 65, 0.1);
     border: 1px solid rgba(0, 255, 65, 0.2);
     color: var(--secondary-color);
-    letter-spacing: 1px;
+}
+
+/* Text-parsed events get an amber badge to signal lower confidence */
+.source-text {
+    background: rgba(255, 152, 0, 0.1);
+    border: 1px solid rgba(255, 152, 0, 0.3);
+    color: #ffb74d;
+}
+
+.event-card-text-source {
+    border-left: 3px solid rgba(255, 152, 0, 0.35);
 }
 
 .event-card-name {
