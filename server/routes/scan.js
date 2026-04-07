@@ -3,15 +3,18 @@ import { validateUrl } from '../utils/validators.js';
 import { scrape } from '../services/scraper.js';
 import { score } from '../services/scoring.js';
 import { aiScore } from '../services/aiScoring.js';
+import { scanLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
 /**
  * POST /api/scan
  * Body: { url: string }
- * Returns full scan result or structured error
+ * Returns full scan result or structured error.
+ *
+ * Rate limited: 8 scans / 10 min per IP (on top of the global 120 req/15min limit).
  */
-router.post('/scan', async (req, res) => {
+router.post('/scan', scanLimiter, async (req, res) => {
     const { url } = req.body;
 
     // 1) Validate + SSRF-protect the URL

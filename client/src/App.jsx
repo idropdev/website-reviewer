@@ -24,6 +24,15 @@ function App() {
 
             const data = await response.json();
 
+            // Rate limited — show a specific, friendly message
+            if (response.status === 429) {
+                const retryMin = data?.error?.retryAfter
+                    ? Math.ceil(data.error.retryAfter / 60)
+                    : 10;
+                setError(`⏱ Scan limit reached. You can run up to 8 scans every 10 minutes. Please wait ${retryMin} minute${retryMin !== 1 ? 's' : ''} and try again.`);
+                return;
+            }
+
             if (!response.ok || data.error) {
                 const msg = data?.error?.message || `Server error: ${response.status}`;
                 setError(msg);
