@@ -1,4 +1,7 @@
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+
+puppeteer.use(StealthPlugin());
 import https from 'https';
 import http from 'http';
 import os from 'os';
@@ -530,10 +533,12 @@ async function probeWithCDP(url) {
  * @param {number} attempt - Current attempt number (1-indexed)
  */
 async function scrapeClean(url, attempt = 1) {
-    const MAX_ATTEMPTS = 3;
-    const waitMsByAttempt = [2500, 4000, 6000];
-    const waitMs = waitMsByAttempt[attempt - 1] ?? 6000;
-    const waitUntil = attempt === 1 ? 'networkidle2' : 'networkidle0';
+    const MAX_ATTEMPTS = 2; // Reduced from 3 to prevent serverless timeout crashes
+    // Use conservative wait times so we don't breach strict 10-15s hosting limits
+    const waitMsByAttempt = [1500, 3000];
+    const waitMs = waitMsByAttempt[attempt - 1] ?? 3000;
+    // networkidle2 is risky for serverless because of persistent websockets/pixels. Use domcontentloaded for retries
+    const waitUntil = attempt === 1 ? 'networkidle2' : 'domcontentloaded';
 
     console.log(`[scraper] Clean scrape attempt ${attempt}/${MAX_ATTEMPTS}: ${url} (${waitUntil}, +${waitMs}ms)`);
 
@@ -555,7 +560,7 @@ async function scrapeClean(url, attempt = 1) {
         // Retry with longer wait if content is too thin and retries remain
         if (result.wordCount < 100 && attempt < MAX_ATTEMPTS) {
             console.log(`[scraper] Thin result (${result.wordCount} words) on attempt ${attempt} — retrying with longer wait...`);
-            await new Promise((r) => setTimeout(r, 1500 * attempt)); // brief pause before retry
+            await new Promise((r) => setTimeout(r, 500)); // Just 500ms brief pause before retry (was 1500ms)
             return scrapeClean(url, attempt + 1);
         }
 
