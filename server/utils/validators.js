@@ -76,6 +76,15 @@ export async function validateUrl(raw) {
         return err('INVALID_URL', `Could not resolve hostname "${hostname}". Check the URL and try again.`);
     }
 
+    // Strip common analytics and ad tracking parameters
+    const trackingParams = [
+        'gad_source', 'gclid', 'fbclid', 'msclkid',
+        'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'
+    ];
+    for (const param of trackingParams) {
+        parsed.searchParams.delete(param);
+    }
+
     return { ok: true, url: parsed.href };
 }
 
